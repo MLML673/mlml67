@@ -48,26 +48,36 @@ end
 local function createESPBox(targetPlayer)
     if not targetPlayer or targetPlayer == player then return end
     
-    local char = targetPlayer.Character
-    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
-    
     -- Удаляем старый ESP если существует
     if ESPObjects[targetPlayer] then
-        pcall(function() ESPObjects[targetPlayer].destroy() end)
+        pcall(function() 
+            if ESPObjects[targetPlayer].box then
+                ESPObjects[targetPlayer].box:Remove()
+            end
+        end)
+        ESPObjects[targetPlayer] = nil
     end
     
-    local box = Drawing.new("Box")
+    -- Создаем BOX
+    local box = Drawing.new("Square")
     box.Visible = false
     box.Color = Color3.fromRGB(0, 255, 230)
     box.Thickness = 2
-    box.Transparency = 0.8
+    box.Filled = false
+    
+    -- Создаем TEXT (имя игрока)
+    local textLabel = Drawing.new("Text")
+    textLabel.Visible = false
+    textLabel.Color = Color3.fromRGB(0, 255, 230)
+    textLabel.Size = 14
+    textLabel.Center = true
+    textLabel.Outline = true
+    textLabel.Font = 2
     
     ESPObjects[targetPlayer] = {
         box = box,
-        player = targetPlayer,
-        destroy = function()
-            pcall(function() box:Remove() end)
-        end
+        text = textLabel,
+        player = targetPlayer
     }
 end
 
@@ -85,27 +95,38 @@ local function updateESP()
             local espObj = ESPObjects[targetPlayer]
             if espObj then
                 local char = targetPlayer.Character
-                if char and char:FindFirstChild("HumanoidRootPart") then
+                if char and char:FindFirstChild("HumanoidRootPart") and char:FindFirstChild("Head") then
                     local humanoidRootPart = char.HumanoidRootPart
+                    local head = char.Head
+                    
+                    -- Преобразуем позицию в экранные координаты
                     local screenPos, onScreen = camera:WorldToScreenPoint(humanoidRootPart.Position)
                     
                     if onScreen then
-                        local size = 40
-                        espObj.box.Visible = true
-                        espObj.box.TopLeft = Vector2.new(screenPos.X - size/2, screenPos.Y - size/2)
-                        espObj.box.BottomRight = Vector2.new(screenPos.X + size/2, screenPos.Y + size/2)
+                        -- Определяем цвет в зависимости от видимости
+                        local isInvisible = humanoidRootPart.Transparency > 0.5
+                        local boxColor = isInvisible and Color3.fromRGB(255, 0, 0) or Color3.fromRGB(0, 255, 230)
                         
-                        -- Цвет меняется в зависимости от видимости
-                        if humanoidRootPart.Transparency > 0.5 then
-                            espObj.box.Color = Color3.fromRGB(255, 100, 100) -- Невидимый игрок - красный
-                        else
-                            espObj.box.Color = Color3.fromRGB(0, 255, 230) -- Видимый игрок - голубой
-                        end
+                        espObj.box.Visible = true
+                        espObj.box.Color = boxColor
+                        
+                        -- Размер бокса
+                        local boxSize = 30 + (500 / screenPos.Z) * 5
+                        espObj.box.Size = Vector2.new(boxSize, boxSize * 1.5)
+                        espObj.box.Position = Vector2.new(screenPos.X - boxSize/2, screenPos.Y - boxSize/2)
+                        
+                        -- Обновляем текст
+                        espObj.text.Visible = true
+                        espObj.text.Color = boxColor
+                        espObj.text.Position = Vector2.new(screenPos.X, screenPos.Y - boxSize/2 - 15)
+                        espObj.text.Text = targetPlayer.Name .. (isInvisible and " [НЕВИДИМЫЙ]" or "")
                     else
                         espObj.box.Visible = false
+                        espObj.text.Visible = false
                     end
                 else
                     espObj.box.Visible = false
+                    espObj.text.Visible = false
                 end
             end
         end
@@ -120,7 +141,10 @@ local function toggleESP()
         
         -- Очищаем старые объекты
         for _, obj in pairs(ESPObjects) do
-            pcall(function() obj.destroy() end)
+            pcall(function() 
+                if obj.box then obj.box:Remove() end
+                if obj.text then obj.text:Remove() end
+            end)
         end
         ESPObjects = {}
         
@@ -139,7 +163,10 @@ local function toggleESP()
         
         -- Удаляем все ESP объекты
         for _, obj in pairs(ESPObjects) do
-            pcall(function() obj.destroy() end)
+            pcall(function() 
+                if obj.box then obj.box:Remove() end
+                if obj.text then obj.text:Remove() end
+            end)
         end
         ESPObjects = {}
         
@@ -227,7 +254,9 @@ strokeGradient.Color = ColorSequence.new({
 
 -- Animate the Shine
 RunService.RenderStepped:Connect(function()
-    strokeGradient.Rotation = (strokeGradient.Rotation + 1.5) % 360
+    if main.Visible then
+        strokeGradient.Rotation = (strokeGradient.Rotation + 1.5) % 360
+    end
 end)
 
 -- Header
@@ -258,6 +287,14 @@ closeBtn.BorderSizePixel = 0
 
 local closeBtnCorner = Instance.new("UICorner", closeBtn)
 closeBtnCorner.CornerRadius = UDim.new(0, 8)
+
+closeBtn.MouseEnter:Connect(function()
+    TweenService:Create(closeBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255, 60, 60)}):Play()
+end)
+
+closeBtn.MouseLeave:Connect(function()
+    TweenService:Create(closeBtn, TweenInfo.new(0.2), {BackgroundColor3 = Theme.Button}):Play()
+end)
 
 local glow = Instance.new("ImageLabel", main)
 glow.Name = "Glow"
@@ -336,14 +373,13 @@ keyBtn.MouseButton1Click:Connect(function()
     keyBtn.TextColor3 = Theme.Accent
 end)
 
--- Close Button
+-- Close Button - ЗАКРЫТИЕ СРАЗУ
 closeBtn.MouseButton1Click:Connect(function()
-    main:TweenSize(UDim2.new(0, 280, 0, 0), "In", "Quad", 0.3, true)
-    task.wait(0.3)
     main.Visible = false
 end)
 
--- Open Menu with M key
+-- Open Menu with M key - ОТКРЫТИЕ СРАЗУ
+local menuOpen = true
 UserInputService.InputBegan:Connect(function(input, gp)
     if isWaitingForKey and input.UserInputType == Enum.UserInputType.Keyboard then
         teleportKey = input.KeyCode
@@ -353,14 +389,8 @@ UserInputService.InputBegan:Connect(function(input, gp)
     elseif not gp and input.KeyCode == teleportKey then
         executeAction()
     elseif not gp and input.KeyCode == menuToggleKey then
-        if main.Visible then
-            main:TweenSize(UDim2.new(0, 280, 0, 0), "In", "Quad", 0.3, true)
-            task.wait(0.3)
-            main.Visible = false
-        else
-            main.Visible = true
-            main:TweenSize(UDim2.new(0, 280, 0, 300), "Out", "Quad", 0.3, true)
-        end
+        menuOpen = not menuOpen
+        main.Visible = menuOpen
     end
 end)
 
@@ -390,9 +420,12 @@ end)
 -- Cleanup when player leaves
 Players.PlayerRemoving:Connect(function(leftPlayer)
     if ESPObjects[leftPlayer] then
-        pcall(function() ESPObjects[leftPlayer].destroy() end)
+        pcall(function() 
+            if ESPObjects[leftPlayer].box then ESPObjects[leftPlayer].box:Remove() end
+            if ESPObjects[leftPlayer].text then ESPObjects[leftPlayer].text:Remove() end
+        end)
         ESPObjects[leftPlayer] = nil
     end
 end)
 
-notify("MLML673 HUB", "Ultra-Premium UI Loaded | M = Меню | F = Teleport")
+notify("MLML673 HUB", "ESP Готов! M = Меню | F = Teleport")
