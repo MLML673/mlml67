@@ -1,10 +1,9 @@
 --[[
-    MLML673 HUB - TP BLOCK (V14 ULTRA-PREMIUM) + ADVANCED ESP
+    MLML673 HUB - TP BLOCK (V14 ULTRA-PREMIUM)
     - Animated Shimmer Stroke
     - Spring-based Interactive UI
     - Modern Obsidian Theme
-    - Player ESP Highlight System + Invisible Detection
-    - Billboard with Player Names
+    - ESP System with Invisible Player Detection
 ]]
 
 local Players = game:GetService("Players")
@@ -21,9 +20,8 @@ local isWaitingForKey = false
 
 -- --- ESP CONFIG ---
 local espEnabled = false
+local espBoxes = {}
 local espConnections = {}
-local espHighlights = {}
-local billboardConnections = {}
 
 -- --- THEME CONFIG ---
 local Theme = {
@@ -32,9 +30,7 @@ local Theme = {
     AccentSecondary = Color3.fromRGB(0, 120, 255),
     Button = Color3.fromRGB(20, 20, 25),
     Text = Color3.fromRGB(255, 255, 255),
-    TextDim = Color3.fromRGB(150, 150, 160),
-    ESPColor = Color3.fromRGB(255, 0, 0),
-    ESPOutline = Color3.fromRGB(255, 255, 255)
+    TextDim = Color3.fromRGB(150, 150, 160)
 }
 
 -- --- NOTIFICATION ---
@@ -46,160 +42,100 @@ local function notify(title, text)
     })
 end
 
--- --- HELPER FUNCTIONS ---
-local function isCharacterInvisible(character)
-    if not character then return false end
+-- --- ESP LOGIC ---
+local function createESPBox(targetPlayer)
+    if targetPlayer == player or not targetPlayer.Character then return nil end
     
-    local invisiblePartCount = 0
-    local totalPartCount = 0
+    local boxId = tostring(targetPlayer.UserId)
+    if espBoxes[boxId] then return espBoxes[boxId] end
     
-    for _, part in ipairs(character:GetDescendants()) do
-        if part:IsA("BasePart") then
-            totalPartCount = totalPartCount + 1
-            if part.Transparency >= 0.9 then
-                invisiblePartCount = invisiblePartCount + 1
+    local box = Drawing.new("Square")
+    box.Visible = false
+    box.Filled = false
+    box.Thickness = 2
+    box.Color = Color3.fromRGB(0, 255, 230)
+    box.Transparency = 0.8
+    
+    espBoxes[boxId] = {
+        Drawing = box,
+        Player = targetPlayer,
+        BoxId = boxId
+    }
+    
+    return espBoxes[boxId]
+end
+
+local function updateESPBox(espBox)
+    if not espBox or not espBox.Player or not espBox.Player.Character then
+        return false
+    end
+    
+    local humanoidRootPart = espBox.Player.Character:FindFirstChild("HumanoidRootPart")
+    if not humanoidRootPart then
+        return false
+    end
+    
+    local camera = workspace.CurrentCamera
+    local screenPos, onScreen = camera:WorldToScreenPoint(humanoidRootPart.Position)
+    
+    if onScreen then
+        local size = Vector2.new(3, 4)
+        local topLeft = Vector2.new(screenPos.X - 25, screenPos.Y - 35)
+        
+        espBox.Drawing.Position = topLeft
+        espBox.Drawing.Size = Vector2.new(50, 70)
+        espBox.Drawing.Visible = true
+        
+        -- Изменение цвета для невидимых игроков
+        local humanoid = espBox.Player.Character:FindFirstChild("Humanoid")
+        if humanoid and humanoid.Health > 0 then
+            if espBox.Player.Character:FindFirstChild("Humanoid") and espBox.Player.Character.Humanoid.Health > 0 then
+                -- Проверка прозрачности
+                local isInvisible = false
+                for _, part in ipairs(espBox.Player.Character:GetDescendants()) do
+                    if part:IsA("BasePart") and part.Transparency >= 0.9 then
+                        isInvisible = true
+                        break
+                    end
+                end
+                
+                if isInvisible then
+                    espBox.Drawing.Color = Color3.fromRGB(255, 0, 150) -- Розовый для невидимых
+                else
+                    espBox.Drawing.Color = Color3.fromRGB(0, 255, 230) -- Голубой для видимых
+                end
             end
         end
+    else
+        espBox.Drawing.Visible = false
     end
     
-    return totalPartCount > 0 and invisiblePartCount >= (totalPartCount * 0.8)
-end
-
-local function createNameBillboard(parent, playerName)
-    if parent:FindFirstChild("PlayerNameBillboard") then
-        parent:FindFirstChild("PlayerNameBillboard"):Destroy()
-    end
-    
-    local billboard = Instance.new("BillboardGui")
-    billboard.Name = "PlayerNameBillboard"
-    billboard.Size = UDim2.new(0, 150, 0, 30)
-    billboard.Adornee = parent
-    billboard.AlwaysOnTop = true
-    billboard.StudsOffset = Vector3.new(0, 3, 0)
-    billboard.MaxDistance = 500
-    
-    local nameLabel = Instance.new("TextLabel", billboard)
-    nameLabel.Size = UDim2.new(1, 0, 1, 0)
-    nameLabel.BackgroundColor3 = Color3.fromRGB(10, 10, 12)
-    nameLabel.BorderSizePixel = 0
-    nameLabel.BackgroundTransparency = 0.3
-    nameLabel.Text = playerName
-    nameLabel.TextColor3 = Color3.fromRGB(0, 255, 100)
-    nameLabel.Font = Enum.Font.GothamBold
-    nameLabel.TextSize = 14
-    nameLabel.TextScaled = true
-    
-    local corner = Instance.new("UICorner", nameLabel)
-    corner.CornerRadius = UDim.new(0, 6)
-    
-    local stroke = Instance.new("UIStroke", nameLabel)
-    stroke.Color = Theme.Accent
-    stroke.Thickness = 1
-    stroke.Transparency = 0.3
-    
-    billboard.Parent = parent
-    return billboard
-end
-
-local function removeNameBillboard(parent, playerName)
-    local billboard = parent:FindFirstChild("PlayerNameBillboard")
-    if billboard then
-        billboard:Destroy()
-    end
-    
-    if billboardConnections[playerName] then
-        billboardConnections[playerName]:Disconnect()
-        billboardConnections[playerName] = nil
-    end
-end
-
--- --- ESP FUNCTIONS ---
-local function addESPToCharacter(character, plr)
-    if not character:FindFirstChild("HumanoidRootPart") then
-        return
-    end
-    
-    if character:FindFirstChild("Highlight") then
-        return
-    end
-    
-    local highlight = Instance.new("Highlight")
-    highlight.FillColor = Theme.ESPColor
-    highlight.OutlineColor = Theme.ESPOutline
-    highlight.FillTransparency = 0.4
-    highlight.OutlineTransparency = 0
-    highlight.Adornee = character
-    highlight.Parent = character
-    
-    espHighlights[plr] = highlight
-    
-    -- Create Name Billboard
-    if character:FindFirstChild("Head") then
-        createNameBillboard(character.Head, plr.Name)
-    end
-end
-
-local function removeESPFromCharacter(character, plr)
-    local highlight = character:FindFirstChild("Highlight")
-    if highlight then
-        highlight:Destroy()
-    end
-    
-    if character:FindFirstChild("Head") then
-        removeNameBillboard(character.Head, plr.Name)
-    end
-    
-    espHighlights[plr] = nil
+    return true
 end
 
 local function enableESP()
     espEnabled = true
     
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= player and p.Character then
-            addESPToCharacter(p.Character, p)
+    for _, targetPlayer in ipairs(Players:GetPlayers()) do
+        if targetPlayer ~= player then
+            createESPBox(targetPlayer)
         end
     end
     
-    for plr, conn in pairs(espConnections) do
-        if conn then pcall(function() conn:Disconnect() end) end
-    end
-    espConnections = {}
-    
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= player then
-            espConnections[p] = p.CharacterAdded:Connect(function(character)
-                character:WaitForChild("HumanoidRootPart", 3)
-                if espEnabled then
-                    addESPToCharacter(character, p)
-                end
-            end)
-        end
-    end
-    
-    notify("✅ ESP", "ESP Enabled")
+    notify("✅ ESP", "ESP включен")
 end
 
 local function disableESP()
     espEnabled = false
     
-    for plr, conn in pairs(espConnections) do
-        if conn then pcall(function() conn:Disconnect() end) end
-    end
-    espConnections = {}
-    
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p.Character then
-            removeESPFromCharacter(p.Character, p)
+    for boxId, espBox in pairs(espBoxes) do
+        if espBox.Drawing then
+            espBox.Drawing:Remove()
         end
     end
     
-    for playerName, conn in pairs(billboardConnections) do
-        if conn then pcall(function() conn:Disconnect() end) end
-    end
-    billboardConnections = {}
-    
-    notify("❌ ESP", "ESP Disabled")
+    espBoxes = {}
+    notify("❌ ESP", "ESP отключен")
 end
 
 local function toggleESP()
@@ -210,45 +146,34 @@ local function toggleESP()
     end
 end
 
--- Handle new players joining
-Players.PlayerAdded:Connect(function(p)
-    if p ~= player then
-        espConnections[p] = p.CharacterAdded:Connect(function(character)
-            character:WaitForChild("HumanoidRootPart", 3)
-            if espEnabled then
-                addESPToCharacter(character, p)
-            end
-        end)
+-- Мониторинг новых игроков
+Players.PlayerAdded:Connect(function(newPlayer)
+    if espEnabled and newPlayer ~= player then
+        task.wait(0.1)
+        createESPBox(newPlayer)
     end
 end)
 
--- Clean up when players leave
-Players.PlayerRemoving:Connect(function(p)
-    if espConnections[p] then
-        espConnections[p]:Disconnect()
-        espConnections[p] = nil
-    end
-    if p.Character then
-        removeESPFromCharacter(p.Character, p)
+-- Мониторинг удаления игроков
+Players.PlayerRemoving:Connect(function(removingPlayer)
+    local boxId = tostring(removingPlayer.UserId)
+    if espBoxes[boxId] then
+        if espBoxes[boxId].Drawing then
+            espBoxes[boxId].Drawing:Remove()
+        end
+        espBoxes[boxId] = nil
     end
 end)
 
--- Monitor for invisible players and update ESP
-RunService.Heartbeat:Connect(function()
-    if not espEnabled then return end
-    
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= player and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-            local character = p.Character
-            
-            -- Always show highlight if ESP is on
-            if not character:FindFirstChild("Highlight") then
-                addESPToCharacter(character, p)
-            end
-            
-            -- Ensure billboard exists
-            if character:FindFirstChild("Head") and not character.Head:FindFirstChild("PlayerNameBillboard") then
-                createNameBillboard(character.Head, p.Name)
+-- Обновление ESP боксов каждый кадр
+RunService.RenderStepped:Connect(function()
+    if espEnabled then
+        for boxId, espBox in pairs(espBoxes) do
+            if not updateESPBox(espBox) then
+                if espBox.Drawing then
+                    espBox.Drawing:Remove()
+                end
+                espBoxes[boxId] = nil
             end
         end
     end
@@ -309,8 +234,8 @@ sg.ResetOnSpawn = false
 
 -- Main Container
 local main = Instance.new("Frame", sg)
-main.Size = UDim2.new(0, 280, 0, 310)
-main.Position = UDim2.new(0.5, -140, 0.5, -155)
+main.Size = UDim2.new(0, 280, 0, 300)
+main.Position = UDim2.new(0.5, -140, 0.5, -150)
 main.BackgroundColor3 = Theme.Background
 main.BorderSizePixel = 0
 
@@ -402,22 +327,12 @@ local function createBtn(text, y)
 end
 
 local actionBtn = createBtn("EXECUTE TELEPORT", 70)
-local espBtn = createBtn("ESP: OFF", 130)
-local keyBtn = createBtn("KEYBIND: " .. teleportKey.Name, 190)
+local keyBtn = createBtn("KEYBIND: " .. teleportKey.Name, 130)
+local espBtn = createBtn("ESP: OFF", 190)
 
 -- Interaction
 actionBtn.MouseButton1Click:Connect(function()
     executeAction()
-end)
-
-espBtn.MouseButton1Click:Connect(function()
-    toggleESP()
-    espBtn.Text = "ESP: " .. (espEnabled and "ON" or "OFF")
-    if espEnabled then
-        espBtn.TextColor3 = Color3.fromRGB(0, 255, 100)
-    else
-        espBtn.TextColor3 = Theme.TextDim
-    end
 end)
 
 keyBtn.MouseButton1Click:Connect(function()
@@ -425,6 +340,11 @@ keyBtn.MouseButton1Click:Connect(function()
     isWaitingForKey = true
     keyBtn.Text = "WAITING..."
     keyBtn.TextColor3 = Theme.Accent
+end)
+
+espBtn.MouseButton1Click:Connect(function()
+    toggleESP()
+    espBtn.Text = espEnabled and "ESP: ON" or "ESP: OFF"
 end)
 
 UserInputService.InputBegan:Connect(function(input, gp)
@@ -461,4 +381,4 @@ UserInputService.InputEnded:Connect(function(input)
     end
 end)
 
-notify("MLML673 HUB", "Ultra-Premium UI Loaded + ESP Ready")
+notify("MLML673 HUB", "Ultra-Premium UI Loaded")
