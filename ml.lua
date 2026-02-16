@@ -3,7 +3,7 @@
     - Animated Shimmer Stroke
     - Spring-based Interactive UI
     - Modern Obsidian Theme
-    - ESP System with Invisible Player Detection
+    - ESP System with Glow Effects for Invisible Players
 ]]
 
 local Players = game:GetService("Players")
@@ -20,8 +20,8 @@ local isWaitingForKey = false
 
 -- --- ESP CONFIG ---
 local espEnabled = false
-local espBoxes = {}
-local espConnections = {}
+local espGlows = {}
+local originalSurfaceGuis = {}
 
 -- --- THEME CONFIG ---
 local Theme = {
@@ -43,71 +43,96 @@ local function notify(title, text)
 end
 
 -- --- ESP LOGIC ---
-local function createESPBox(targetPlayer)
+local function createGlowForPlayer(targetPlayer)
     if targetPlayer == player or not targetPlayer.Character then return nil end
     
-    local boxId = tostring(targetPlayer.UserId)
-    if espBoxes[boxId] then return espBoxes[boxId] end
+    local playerId = targetPlayer.UserId
+    if espGlows[playerId] then return espGlows[playerId] end
     
-    local box = Drawing.new("Square")
-    box.Visible = false
-    box.Filled = false
-    box.Thickness = 2
-    box.Color = Color3.fromRGB(0, 255, 230)
-    box.Transparency = 0.8
+    local character = targetPlayer.Character
+    local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
     
-    espBoxes[boxId] = {
-        Drawing = box,
+    if not humanoidRootPart then return nil end
+    
+    -- Проверяем, невидимый ли игрок
+    local isInvisible = false
+    for _, part in ipairs(character:GetDescendants()) do
+        if part:IsA("BasePart") and part.Transparency >= 0.9 then
+            isInvisible = true
+            break
+        end
+    end
+    
+    local glowColor = isInvisible and Color3.fromRGB(255, 0, 150) or Color3.fromRGB(0, 255, 230)
+    
+    -- Создаём свечение для каждой части персонажа
+    local glowParts = {}
+    
+    for _, part in ipairs(character:GetDescendants()) do
+        if part:IsA("BasePart") then
+            local glow = Instance.new("Part")
+            glow.Shape = Enum.PartType.Ball
+            glow.CanCollide = false
+            glow.CFrame = part.CFrame
+            glow.Size = part.Size * 1.1
+            glow.Color = glowColor
+            glow.TopSurface = Enum.SurfaceType.Smooth
+            glow.BottomSurface = Enum.SurfaceType.Smooth
+            glow.Material = Enum.Material.Neon
+            glow.Transparency = 0.3
+            glow.Parent = workspace
+            
+            -- Сварка свечения с частью
+            local weld = Instance.new("WeldConstraint")
+            weld.Part0 = part
+            weld.Part1 = glow
+            weld.Parent = glow
+            
+            table.insert(glowParts, glow)
+        end
+    end
+    
+    espGlows[playerId] = {
         Player = targetPlayer,
-        BoxId = boxId
+        GlowParts = glowParts,
+        IsInvisible = isInvisible,
+        Color = glowColor
     }
     
-    return espBoxes[boxId]
+    return espGlows[playerId]
 end
 
-local function updateESPBox(espBox)
-    if not espBox or not espBox.Player or not espBox.Player.Character then
+local function updateGlowForPlayer(playerId)
+    local espData = espGlows[playerId]
+    if not espData or not espData.Player or not espData.Player.Character then
         return false
     end
     
-    local humanoidRootPart = espBox.Player.Character:FindFirstChild("HumanoidRootPart")
-    if not humanoidRootPart then
+    local character = espData.Player.Character
+    local humanoid = character:FindFirstChild("Humanoid")
+    
+    if not humanoid or humanoid.Health <= 0 then
         return false
     end
     
-    local camera = workspace.CurrentCamera
-    local screenPos, onScreen = camera:WorldToScreenPoint(humanoidRootPart.Position)
-    
-    if onScreen then
-        local size = Vector2.new(3, 4)
-        local topLeft = Vector2.new(screenPos.X - 25, screenPos.Y - 35)
-        
-        espBox.Drawing.Position = topLeft
-        espBox.Drawing.Size = Vector2.new(50, 70)
-        espBox.Drawing.Visible = true
-        
-        -- Изменение цвета для невидимых игроков
-        local humanoid = espBox.Player.Character:FindFirstChild("Humanoid")
-        if humanoid and humanoid.Health > 0 then
-            if espBox.Player.Character:FindFirstChild("Humanoid") and espBox.Player.Character.Humanoid.Health > 0 then
-                -- Проверка прозрачности
-                local isInvisible = false
-                for _, part in ipairs(espBox.Player.Character:GetDescendants()) do
-                    if part:IsA("BasePart") and part.Transparency >= 0.9 then
-                        isInvisible = true
-                        break
-                    end
-                end
-                
-                if isInvisible then
-                    espBox.Drawing.Color = Color3.fromRGB(255, 0, 150) -- Розовый для невидимых
-                else
-                    espBox.Drawing.Color = Color3.fromRGB(0, 255, 230) -- Голубой для видимых
-                end
-            end
+    -- Проверяем, изменился ли статус невидимости
+    local isInvisible = false
+    for _, part in ipairs(character:GetDescendants()) do
+        if part:IsA("BasePart") and part.Transparency >= 0.9 then
+            isInvisible = true
+            break
         end
-    else
-        espBox.Drawing.Visible = false
+    end
+    
+    -- Обновляем цвет если изменился статус
+    if isInvisible ~= espData.IsInvisible then
+        local newColor = isInvisible and Color3.fromRGB(255, 0, 150) or Color3.fromRGB(0, 255, 230)
+        espData.Color = newColor
+        espData.IsInvisible = isInvisible
+        
+        for _, glow in ipairs(espData.GlowParts) do
+            glow.Color = newColor
+        end
     end
     
     return true
@@ -118,24 +143,27 @@ local function enableESP()
     
     for _, targetPlayer in ipairs(Players:GetPlayers()) do
         if targetPlayer ~= player then
-            createESPBox(targetPlayer)
+            task.wait(0.05)
+            createGlowForPlayer(targetPlayer)
         end
     end
     
-    notify("✅ ESP", "ESP включен")
+    notify("✅ ESP", "Свечение включено")
 end
 
 local function disableESP()
     espEnabled = false
     
-    for boxId, espBox in pairs(espBoxes) do
-        if espBox.Drawing then
-            espBox.Drawing:Remove()
+    for playerId, espData in pairs(espGlows) do
+        for _, glow in ipairs(espData.GlowParts) do
+            if glow and glow.Parent then
+                glow:Destroy()
+            end
         end
     end
     
-    espBoxes = {}
-    notify("❌ ESP", "ESP отключен")
+    espGlows = {}
+    notify("❌ ESP", "Свечение отключено")
 end
 
 local function toggleESP()
@@ -150,32 +178,64 @@ end
 Players.PlayerAdded:Connect(function(newPlayer)
     if espEnabled and newPlayer ~= player then
         task.wait(0.1)
-        createESPBox(newPlayer)
+        createGlowForPlayer(newPlayer)
     end
 end)
 
 -- Мониторинг удаления игроков
 Players.PlayerRemoving:Connect(function(removingPlayer)
-    local boxId = tostring(removingPlayer.UserId)
-    if espBoxes[boxId] then
-        if espBoxes[boxId].Drawing then
-            espBoxes[boxId].Drawing:Remove()
+    local playerId = removingPlayer.UserId
+    if espGlows[playerId] then
+        for _, glow in ipairs(espGlows[playerId].GlowParts) do
+            if glow and glow.Parent then
+                glow:Destroy()
+            end
         end
-        espBoxes[boxId] = nil
+        espGlows[playerId] = nil
     end
 end)
 
--- Обновление ESP боксов каждый кадр
+-- Обновление свечения каждый кадр
 RunService.RenderStepped:Connect(function()
     if espEnabled then
-        for boxId, espBox in pairs(espBoxes) do
-            if not updateESPBox(espBox) then
-                if espBox.Drawing then
-                    espBox.Drawing:Remove()
+        for playerId, espData in pairs(espGlows) do
+            if not updateGlowForPlayer(playerId) then
+                for _, glow in ipairs(espData.GlowParts) do
+                    if glow and glow.Parent then
+                        glow:Destroy()
+                    end
                 end
-                espBoxes[boxId] = nil
+                espGlows[playerId] = nil
             end
         end
+    end
+end)
+
+-- Мониторинг новых частей персонажа (для динамических объектов)
+Players.PlayerAdded:Connect(function(newPlayer)
+    newPlayer.CharacterAdded:Connect(function(character)
+        if espEnabled then
+            task.wait(0.2)
+            local playerId = newPlayer.UserId
+            if espGlows[playerId] then
+                -- Очищаем старые свечения
+                for _, glow in ipairs(espGlows[playerId].GlowParts) do
+                    if glow and glow.Parent then
+                        glow:Destroy()
+                    end
+                end
+            end
+            createGlowForPlayer(newPlayer)
+        end
+    end)
+end)
+
+player.CharacterAdded:Connect(function()
+    if espEnabled then
+        -- Пересоздаём ESP для текущего игрока после возрождения
+        disableESP()
+        task.wait(0.5)
+        enableESP()
     end
 end)
 
