@@ -1,9 +1,10 @@
 --[[
-    MLML673 HUB - TP BLOCK (V14 ULTRA-PREMIUM) + ESP
+    MLML673 HUB - TP BLOCK (V14 ULTRA-PREMIUM) + ADVANCED ESP
     - Animated Shimmer Stroke
     - Spring-based Interactive UI
     - Modern Obsidian Theme
-    - Player ESP Highlight System
+    - Player ESP Highlight System + Invisible Detection
+    - Billboard with Name and Held Item
 ]]
 
 local Players = game:GetService("Players")
@@ -22,6 +23,7 @@ local isWaitingForKey = false
 local espEnabled = false
 local espConnections = {}
 local espHighlights = {}
+local billboardConnections = {}
 
 -- --- THEME CONFIG ---
 local Theme = {
@@ -44,6 +46,122 @@ local function notify(title, text)
     })
 end
 
+-- --- HELPER FUNCTIONS ---
+local function isCharacterInvisible(character)
+    if not character then return false end
+    
+    local invisiblePartCount = 0
+    local totalPartCount = 0
+    
+    for _, part in ipairs(character:GetDescendants()) do
+        if part:IsA("BasePart") then
+            totalPartCount = totalPartCount + 1
+            if part.Transparency >= 0.9 then
+                invisiblePartCount = invisiblePartCount + 1
+            end
+        end
+    end
+    
+    return totalPartCount > 0 and invisiblePartCount >= (totalPartCount * 0.8)
+end
+
+local function getHeldItem(character)
+    if not character then return "None" end
+    
+    for _, child in ipairs(character:GetChildren()) do
+        if child:IsA("Tool") or child:IsA("Accessory") then
+            return child.Name
+        end
+    end
+    
+    return "None"
+end
+
+local function createBillboard(parent, playerName, character)
+    if parent:FindFirstChild("PlayerInfoBillboard") then
+        parent:FindFirstChild("PlayerInfoBillboard"):Destroy()
+    end
+    
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "PlayerInfoBillboard"
+    billboard.Size = UDim2.new(0, 200, 0, 60)
+    billboard.Adornee = parent
+    billboard.AlwaysOnTop = true
+    billboard.StudsOffset = Vector3.new(0, 4, 0)
+    billboard.MaxDistance = 500
+    
+    -- Container
+    local container = Instance.new("Frame", billboard)
+    container.Size = UDim2.new(1, 0, 1, 0)
+    container.BackgroundColor3 = Color3.fromRGB(10, 10, 12)
+    container.BorderSizePixel = 0
+    container.BackgroundTransparency = 0.3
+    
+    local corner = Instance.new("UICorner", container)
+    corner.CornerRadius = UDim.new(0, 8)
+    
+    local stroke = Instance.new("UIStroke", container)
+    stroke.Color = Theme.Accent
+    stroke.Thickness = 1.5
+    stroke.Transparency = 0.3
+    
+    -- Player Name
+    local nameLabel = Instance.new("TextLabel", container)
+    nameLabel.Size = UDim2.new(1, 0, 0.5, 0)
+    nameLabel.Position = UDim2.new(0, 0, 0, 0)
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.Text = playerName
+    nameLabel.TextColor3 = Color3.fromRGB(0, 255, 100)
+    nameLabel.Font = Enum.Font.GothamBold
+    nameLabel.TextSize = 14
+    nameLabel.TextScaled = true
+    nameLabel.TextWrapped = true
+    
+    -- Held Item
+    local itemLabel = Instance.new("TextLabel", container)
+    itemLabel.Size = UDim2.new(1, 0, 0.5, 0)
+    itemLabel.Position = UDim2.new(0, 0, 0.5, 0)
+    itemLabel.BackgroundTransparency = 1
+    itemLabel.Text = "Item: " .. getHeldItem(character)
+    itemLabel.TextColor3 = Color3.fromRGB(255, 255, 100)
+    itemLabel.Font = Enum.Font.GothamMedium
+    itemLabel.TextSize = 12
+    itemLabel.TextScaled = true
+    itemLabel.TextWrapped = true
+    
+    billboard.Parent = parent
+    
+    -- Update item every 0.5 seconds
+    if billboardConnections[playerName] then
+        billboardConnections[playerName]:Disconnect()
+    end
+    
+    billboardConnections[playerName] = RunService.Heartbeat:Connect(function()
+        if character and parent and parent.Parent then
+            itemLabel.Text = "Item: " .. getHeldItem(character)
+        else
+            if billboardConnections[playerName] then
+                billboardConnections[playerName]:Disconnect()
+                billboardConnections[playerName] = nil
+            end
+        end
+    end)
+    
+    return billboard
+end
+
+local function removeBillboard(parent, playerName)
+    local billboard = parent:FindFirstChild("PlayerInfoBillboard")
+    if billboard then
+        billboard:Destroy()
+    end
+    
+    if billboardConnections[playerName] then
+        billboardConnections[playerName]:Disconnect()
+        billboardConnections[playerName] = nil
+    end
+end
+
 -- --- ESP FUNCTIONS ---
 local function addESPToCharacter(character, plr)
     if not character:FindFirstChild("HumanoidRootPart") then
@@ -63,6 +181,11 @@ local function addESPToCharacter(character, plr)
     highlight.Parent = character
     
     espHighlights[plr] = highlight
+    
+    -- Create Billboard
+    if character:FindFirstChild("Head") then
+        createBillboard(character.Head, plr.Name, character)
+    end
 end
 
 local function removeESPFromCharacter(character, plr)
@@ -70,6 +193,11 @@ local function removeESPFromCharacter(character, plr)
     if highlight then
         highlight:Destroy()
     end
+    
+    if character:FindFirstChild("Head") then
+        removeBillboard(character.Head, plr.Name)
+    end
+    
     espHighlights[plr] = nil
 end
 
@@ -115,6 +243,11 @@ local function disableESP()
         end
     end
     
+    for playerName, conn in pairs(billboardConnections) do
+        if conn then pcall(function() conn:Disconnect() end) end
+    end
+    billboardConnections = {}
+    
     notify("❌ ESP", "ESP Disabled")
 end
 
@@ -146,6 +279,28 @@ Players.PlayerRemoving:Connect(function(p)
     end
     if p.Character then
         removeESPFromCharacter(p.Character, p)
+    end
+end)
+
+-- Monitor for invisible players and update item
+RunService.Heartbeat:Connect(function()
+    if not espEnabled then return end
+    
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= player and p.Character and p.Character:FindFirstChild("Head") then
+            local character = p.Character
+            local isInvisible = isCharacterInvisible(character)
+            
+            -- Always show highlight if ESP is on
+            if not character:FindFirstChild("Highlight") then
+                addESPToCharacter(character, p)
+            end
+            
+            -- Ensure billboard exists
+            if not character.Head:FindFirstChild("PlayerInfoBillboard") then
+                createBillboard(character.Head, p.Name, character)
+            end
+        end
     end
 end)
 
@@ -356,4 +511,4 @@ UserInputService.InputEnded:Connect(function(input)
     end
 end)
 
-notify("MLML673 HUB", "Ultra-Premium UI Loaded + ESP Ready")
+notify("MLML673 HUB", "Ultra-Premium UI Loaded + Advanced ESP Ready")
