@@ -5,6 +5,7 @@
     - Modern Obsidian Theme
     - ESP Player Highlighting
     - Menu Toggle
+    - Discord Link
 ]]
 
 local Players = game:GetService("Players")
@@ -94,8 +95,8 @@ sg.ResetOnSpawn = false
 
 -- Main Container
 local main = Instance.new("Frame", sg)
-main.Size = UDim2.new(0, 280, 0, 290)
-main.Position = UDim2.new(0.5, -140, 0.5, -145)
+main.Size = UDim2.new(0, 280, 0, 360)
+main.Position = UDim2.new(0.5, -140, 0.5, -180)
 main.BackgroundColor3 = Theme.Background
 main.BorderSizePixel = 0
 
@@ -277,6 +278,65 @@ espBtn.MouseButton1Click:Connect(function()
         end
         notify("ESP", "Disabled ✗")
     end
+end)
+
+-- --- FOOTER WITH DISCORD LINK ---
+local footer = Instance.new("Frame", main)
+footer.Size = UDim2.new(1, 0, 0, 60)
+footer.Position = UDim2.new(0, 0, 1, -60)
+footer.BackgroundColor3 = Theme.Background
+footer.BorderSizePixel = 0
+
+local footerCorner = Instance.new("UICorner", footer)
+footerCorner.CornerRadius = UDim.new(0, 16)
+
+local footerStroke = Instance.new("UIStroke", footer)
+footerStroke.Thickness = 1.2
+footerStroke.Color = Theme.Accent
+footerStroke.Transparency = 0.6
+
+-- Separator line
+local separator = Instance.new("Frame", main)
+separator.Size = UDim2.new(1, -20, 0, 1)
+separator.Position = UDim2.new(0.5, -140, 1, -68)
+separator.BackgroundColor3 = Theme.Accent
+separator.BackgroundTransparency = 0.5
+separator.BorderSizePixel = 0
+
+-- Discord text
+local discordLabel = Instance.new("TextLabel", footer)
+discordLabel.Size = UDim2.new(1, -20, 0.5, 0)
+discordLabel.Position = UDim2.new(0, 10, 0, 5)
+discordLabel.Text = "MLML673 HUB"
+discordLabel.TextColor3 = Theme.Accent
+discordLabel.Font = Enum.Font.BuilderSansBold
+discordLabel.TextSize = 14
+discordLabel.BackgroundTransparency = 1
+
+-- Discord link button
+local discordBtn = Instance.new("TextButton", footer)
+discordBtn.Size = UDim2.new(1, -20, 0.5, 0)
+discordBtn.Position = UDim2.new(0, 10, 0.5, 0)
+discordBtn.Text = "discord.gg/kyM5SdBfhr"
+discordBtn.TextColor3 = Color3.fromRGB(88, 101, 242)
+discordBtn.Font = Enum.Font.BuilderSansMedium
+discordBtn.TextSize = 12
+discordBtn.BackgroundTransparency = 1
+discordBtn.TextXAlignment = Enum.TextXAlignment.Left
+
+discordBtn.MouseEnter:Connect(function()
+    discordBtn.TextColor3 = Color3.fromRGB(114, 137, 218)
+    discordBtn.TextSize = 13
+end)
+
+discordBtn.MouseLeave:Connect(function()
+    discordBtn.TextColor3 = Color3.fromRGB(88, 101, 242)
+    discordBtn.TextSize = 12
+end)
+
+discordBtn.MouseButton1Click:Connect(function()
+    setclipboard("https://discord.gg/kyM5SdBfhr")
+    notify("DISCORD", "Link copied to clipboard! ✓")
 end)
 
 -- --- MENU TOGGLE ---
