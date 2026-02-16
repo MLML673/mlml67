@@ -3,8 +3,8 @@
     - Animated Shimmer Stroke
     - Spring-based Interactive UI
     - Modern Obsidian Theme
-    - GLOW ESP SYSTEM (подсветка игроков включая невидимых)
-    - MENU TOGGLE & ESP TOGGLE
+    - ESP Player Highlighting
+    - Menu Toggle
 ]]
 
 local Players = game:GetService("Players")
@@ -17,7 +17,7 @@ local VirtualInputManager = game:GetService("VirtualInputManager")
 local player = Players.LocalPlayer
 local REQUIRED_TOOL = "Flying Carpet"
 local teleportKey = Enum.KeyCode.F
-local menuToggleKey = Enum.KeyCode.M
+local menuToggleKey = Enum.KeyCode.RightControl
 local isWaitingForKey = false
 
 -- --- THEME CONFIG ---
@@ -30,11 +30,6 @@ local Theme = {
     TextDim = Color3.fromRGB(150, 150, 160)
 }
 
--- --- ESP CONFIG ---
-local ESPEnabled = false
-local ESPObjects = {}
-local espUpdateConnection = nil
-
 -- --- NOTIFICATION ---
 local function notify(title, text)
     StarterGui:SetCore("SendNotification", {
@@ -42,139 +37,6 @@ local function notify(title, text)
         Text = text,
         Duration = 3,
     })
-end
-
--- --- ESP FUNCTIONS ---
-local function createESPBox(targetPlayer)
-    if not targetPlayer or targetPlayer == player then return end
-    
-    -- Удаляем старый ESP если существует
-    if ESPObjects[targetPlayer] then
-        pcall(function() 
-            if ESPObjects[targetPlayer].box then
-                ESPObjects[targetPlayer].box:Remove()
-            end
-        end)
-        ESPObjects[targetPlayer] = nil
-    end
-    
-    -- Создаем BOX
-    local box = Drawing.new("Square")
-    box.Visible = false
-    box.Color = Color3.fromRGB(0, 255, 230)
-    box.Thickness = 2
-    box.Filled = false
-    
-    -- Создаем TEXT (имя игрока)
-    local textLabel = Drawing.new("Text")
-    textLabel.Visible = false
-    textLabel.Color = Color3.fromRGB(0, 255, 230)
-    textLabel.Size = 14
-    textLabel.Center = true
-    textLabel.Outline = true
-    textLabel.Font = 2
-    
-    ESPObjects[targetPlayer] = {
-        box = box,
-        text = textLabel,
-        player = targetPlayer
-    }
-end
-
-local function updateESP()
-    if not ESPEnabled then return end
-    
-    local camera = workspace.CurrentCamera
-    
-    for _, targetPlayer in ipairs(Players:GetPlayers()) do
-        if targetPlayer ~= player then
-            if not ESPObjects[targetPlayer] then
-                createESPBox(targetPlayer)
-            end
-            
-            local espObj = ESPObjects[targetPlayer]
-            if espObj then
-                local char = targetPlayer.Character
-                if char and char:FindFirstChild("HumanoidRootPart") and char:FindFirstChild("Head") then
-                    local humanoidRootPart = char.HumanoidRootPart
-                    local head = char.Head
-                    
-                    -- Преобразуем позицию в экранные координаты
-                    local screenPos, onScreen = camera:WorldToScreenPoint(humanoidRootPart.Position)
-                    
-                    if onScreen then
-                        -- Определяем цвет в зависимости от видимости
-                        local isInvisible = humanoidRootPart.Transparency > 0.5
-                        local boxColor = isInvisible and Color3.fromRGB(255, 0, 0) or Color3.fromRGB(0, 255, 230)
-                        
-                        espObj.box.Visible = true
-                        espObj.box.Color = boxColor
-                        
-                        -- Размер бокса
-                        local boxSize = 30 + (500 / screenPos.Z) * 5
-                        espObj.box.Size = Vector2.new(boxSize, boxSize * 1.5)
-                        espObj.box.Position = Vector2.new(screenPos.X - boxSize/2, screenPos.Y - boxSize/2)
-                        
-                        -- Обновляем текст
-                        espObj.text.Visible = true
-                        espObj.text.Color = boxColor
-                        espObj.text.Position = Vector2.new(screenPos.X, screenPos.Y - boxSize/2 - 15)
-                        espObj.text.Text = targetPlayer.Name .. (isInvisible and " [НЕВИДИМЫЙ]" or "")
-                    else
-                        espObj.box.Visible = false
-                        espObj.text.Visible = false
-                    end
-                else
-                    espObj.box.Visible = false
-                    espObj.text.Visible = false
-                end
-            end
-        end
-    end
-end
-
-local function toggleESP()
-    ESPEnabled = not ESPEnabled
-    
-    if ESPEnabled then
-        notify("ESP 🎯", "ESP включен")
-        
-        -- Очищаем старые объекты
-        for _, obj in pairs(ESPObjects) do
-            pcall(function() 
-                if obj.box then obj.box:Remove() end
-                if obj.text then obj.text:Remove() end
-            end)
-        end
-        ESPObjects = {}
-        
-        -- Создаем ESP для всех игроков
-        for _, targetPlayer in ipairs(Players:GetPlayers()) do
-            if targetPlayer ~= player then
-                createESPBox(targetPlayer)
-            end
-        end
-        
-        -- Запускаем обновление ESP
-        if espUpdateConnection then espUpdateConnection:Disconnect() end
-        espUpdateConnection = RunService.RenderStepped:Connect(updateESP)
-    else
-        notify("ESP 🎯", "ESP выключен")
-        
-        -- Удаляем все ESP объекты
-        for _, obj in pairs(ESPObjects) do
-            pcall(function() 
-                if obj.box then obj.box:Remove() end
-                if obj.text then obj.text:Remove() end
-            end)
-        end
-        ESPObjects = {}
-        
-        if espUpdateConnection then
-            espUpdateConnection:Disconnect()
-            espUpdateConnection = nil
-        end
-    end
 end
 
 -- --- LOGIC ---
@@ -223,7 +85,7 @@ end
 
 -- --- UI CONSTRUCTION ---
 if player.PlayerGui:FindFirstChild("MLML673 HUB") then
-    player.PlayerGui["MLML673 HUB"]:Destroy()
+    player.PlayerGui:FindFirstChild("MLML673 HUB"):Destroy()
 end
 
 local sg = Instance.new("ScreenGui", player.PlayerGui)
@@ -232,8 +94,8 @@ sg.ResetOnSpawn = false
 
 -- Main Container
 local main = Instance.new("Frame", sg)
-main.Size = UDim2.new(0, 280, 0, 300)
-main.Position = UDim2.new(0.5, -140, 0.5, -150)
+main.Size = UDim2.new(0, 280, 0, 290)
+main.Position = UDim2.new(0.5, -140, 0.5, -145)
 main.BackgroundColor3 = Theme.Background
 main.BorderSizePixel = 0
 
@@ -254,9 +116,7 @@ strokeGradient.Color = ColorSequence.new({
 
 -- Animate the Shine
 RunService.RenderStepped:Connect(function()
-    if main.Visible then
-        strokeGradient.Rotation = (strokeGradient.Rotation + 1.5) % 360
-    end
+    strokeGradient.Rotation = (strokeGradient.Rotation + 1.5) % 360
 end)
 
 -- Header
@@ -265,7 +125,7 @@ header.Size = UDim2.new(1, 0, 0, 50)
 header.BackgroundTransparency = 1
 
 local title = Instance.new("TextLabel", header)
-title.Size = UDim2.new(1, -40, 1, 0)
+title.Size = UDim2.new(1, 0, 1, 0)
 title.Position = UDim2.new(0, 15, 0, 0)
 title.Text = "MLML673 HUB"
 title.TextColor3 = Theme.Text
@@ -273,28 +133,6 @@ title.Font = Enum.Font.BuilderSansBold
 title.TextSize = 20
 title.TextXAlignment = Enum.TextXAlignment.Left
 title.BackgroundTransparency = 1
-
--- Close Button
-local closeBtn = Instance.new("TextButton", header)
-closeBtn.Size = UDim2.new(0, 30, 0, 30)
-closeBtn.Position = UDim2.new(1, -35, 0.5, -15)
-closeBtn.BackgroundColor3 = Theme.Button
-closeBtn.Text = "✕"
-closeBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
-closeBtn.Font = Enum.Font.BuilderSansBold
-closeBtn.TextSize = 16
-closeBtn.BorderSizePixel = 0
-
-local closeBtnCorner = Instance.new("UICorner", closeBtn)
-closeBtnCorner.CornerRadius = UDim.new(0, 8)
-
-closeBtn.MouseEnter:Connect(function()
-    TweenService:Create(closeBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255, 60, 60)}):Play()
-end)
-
-closeBtn.MouseLeave:Connect(function()
-    TweenService:Create(closeBtn, TweenInfo.new(0.2), {BackgroundColor3 = Theme.Button}):Play()
-end)
 
 local glow = Instance.new("ImageLabel", main)
 glow.Name = "Glow"
@@ -349,21 +187,12 @@ local function createBtn(text, y)
 end
 
 local actionBtn = createBtn("EXECUTE TELEPORT", 70)
-local espBtn = createBtn("ESP: OFF", 130)
-local keyBtn = createBtn("KEYBIND: " .. teleportKey.Name, 190)
+local keyBtn = createBtn("KEYBIND: " .. teleportKey.Name, 130)
+local espBtn = createBtn("ESP: ON", 190)
 
 -- Interaction
 actionBtn.MouseButton1Click:Connect(function()
     executeAction()
-end)
-
-espBtn.MouseButton1Click:Connect(function()
-    toggleESP()
-    espBtn.Text = ESPEnabled and "ESP: ON ✓" or "ESP: OFF"
-    local espBtnInst = espBtn
-    TweenService:Create(espBtnInst, TweenInfo.new(0.2), {
-        BackgroundColor3 = ESPEnabled and Color3.fromRGB(0, 100, 50) or Theme.Button
-    }):Play()
 end)
 
 keyBtn.MouseButton1Click:Connect(function()
@@ -373,13 +202,86 @@ keyBtn.MouseButton1Click:Connect(function()
     keyBtn.TextColor3 = Theme.Accent
 end)
 
--- Close Button - ЗАКРЫТИЕ СРАЗУ
-closeBtn.MouseButton1Click:Connect(function()
-    main.Visible = false
+-- --- ESP BLOCK ---
+local espBoxes = {}
+local espEnabled = true
+
+local function createESP(playerObj)
+    if playerObj == player then return end
+    local char = playerObj.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+
+    local box = Instance.new("BoxHandleAdornment")
+    box.Name = "MLML673ESP"
+    box.Adornee = char:FindFirstChild("HumanoidRootPart")
+    box.AlwaysOnTop = true
+    box.ZIndex = 10
+    box.Size = Vector3.new(4, 6, 2)
+    box.Color3 = Theme.Accent
+    box.Transparency = 0.6
+    box.Parent = workspace
+    espBoxes[playerObj] = box
+end
+
+local function removeESP(playerObj)
+    if espBoxes[playerObj] then
+        espBoxes[playerObj]:Destroy()
+        espBoxes[playerObj] = nil
+    end
+end
+
+local function updateESP()
+    if not espEnabled then return end
+    for _, plr in pairs(Players:GetPlayers()) do
+        if plr ~= player then
+            if plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+                if not espBoxes[plr] then
+                    createESP(plr)
+                else
+                    espBoxes[plr].Adornee = plr.Character:FindFirstChild("HumanoidRootPart")
+                end
+            else
+                removeESP(plr)
+            end
+        end
+    end
+    for plr, box in pairs(espBoxes) do
+        if not Players:FindFirstChild(plr.Name) or not plr.Character or not plr.Character:FindFirstChild("HumanoidRootPart") then
+            removeESP(plr)
+        end
+    end
+end
+
+Players.PlayerAdded:Connect(function(plr)
+    plr.CharacterAdded:Connect(function()
+        task.wait(1)
+        if espEnabled then createESP(plr) end
+    end)
 end)
 
--- Open Menu with M key - ОТКРЫТИЕ СРАЗУ
-local menuOpen = true
+Players.PlayerRemoving:Connect(removeESP)
+
+RunService.RenderStepped:Connect(updateESP)
+
+espBtn.MouseButton1Click:Connect(function()
+    espEnabled = not espEnabled
+    if espEnabled then
+        espBtn.Text = "ESP: ON"
+        espBtn.TextColor3 = Theme.Accent
+        notify("ESP", "Enabled ✓")
+    else
+        espBtn.Text = "ESP: OFF"
+        espBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
+        for plr, box in pairs(espBoxes) do
+            removeESP(plr)
+        end
+        notify("ESP", "Disabled ✗")
+    end
+end)
+
+-- --- MENU TOGGLE ---
+local menuVisible = true
+
 UserInputService.InputBegan:Connect(function(input, gp)
     if isWaitingForKey and input.UserInputType == Enum.UserInputType.Keyboard then
         teleportKey = input.KeyCode
@@ -389,13 +291,19 @@ UserInputService.InputBegan:Connect(function(input, gp)
     elseif not gp and input.KeyCode == teleportKey then
         executeAction()
     elseif not gp and input.KeyCode == menuToggleKey then
-        menuOpen = not menuOpen
-        main.Visible = menuOpen
+        menuVisible = not menuVisible
+        sg.Enabled = menuVisible
+        if menuVisible then
+            notify("MLML673 HUB", "Menu Opened ✓")
+        else
+            notify("MLML673 HUB", "Menu Closed ✗")
+        end
     end
 end)
 
 -- --- DRAGGING ---
-local dragging, dragInput, dragStart, startPos
+local dragging, dragStart, startPos
+
 header.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 then
         dragging = true
@@ -417,15 +325,4 @@ UserInputService.InputEnded:Connect(function(input)
     end
 end)
 
--- Cleanup when player leaves
-Players.PlayerRemoving:Connect(function(leftPlayer)
-    if ESPObjects[leftPlayer] then
-        pcall(function() 
-            if ESPObjects[leftPlayer].box then ESPObjects[leftPlayer].box:Remove() end
-            if ESPObjects[leftPlayer].text then ESPObjects[leftPlayer].text:Remove() end
-        end)
-        ESPObjects[leftPlayer] = nil
-    end
-end)
-
-notify("MLML673 HUB", "ESP Готов! M = Меню | F = Teleport")
+notify("MLML673 HUB", "Ultra-Premium UI Loaded ✨")
