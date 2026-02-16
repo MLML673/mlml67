@@ -1,218 +1,340 @@
 --[[
-    ANTI-CHEAT SPIN ROTATION SCRIPT
-    Game: Steal a Brainrot
-    Rotation Speed: 820°/second
-    Features:
-    - Anti-detection rotation
-    - Hidden from game detection
-    - Smooth 820°/sec rotation
+    MLML673 HUB - TP BLOCK (V14 ULTRA-PREMIUM) + ESP
+    - Animated Shimmer Stroke
+    - Spring-based Interactive UI
+    - Modern Obsidian Theme
+    - Player ESP Highlight System
 ]]
 
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local StarterGui = game:GetService("StarterGui")
+local RunService = game:GetService("RunService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
 
 local player = Players.LocalPlayer
-local SPIN_SPEED = 820 -- градусы в секунду
-local isSpinning = false
-local spinConnection = nil
+local REQUIRED_TOOL = "Flying Carpet"
+local teleportKey = Enum.KeyCode.F
+local isWaitingForKey = false
 
--- --- ANTI-CHEAT FUNCTIONS ---
+-- --- ESP CONFIG ---
+local espEnabled = false
+local espConnections = {}
+local espHighlights = {}
 
--- Скрывает скрипт от детекции
-local function hideFromDetection()
-    local metatable = getrawmetatable(game)
-    local oldIndex = metatable.__index
+-- --- THEME CONFIG ---
+local Theme = {
+    Background = Color3.fromRGB(10, 10, 12),
+    Accent = Color3.fromRGB(0, 255, 230),
+    AccentSecondary = Color3.fromRGB(0, 120, 255),
+    Button = Color3.fromRGB(20, 20, 25),
+    Text = Color3.fromRGB(255, 255, 255),
+    TextDim = Color3.fromRGB(150, 150, 160),
+    ESPColor = Color3.fromRGB(255, 0, 0),
+    ESPOutline = Color3.fromRGB(255, 255, 255)
+}
+
+-- --- NOTIFICATION ---
+local function notify(title, text)
+    StarterGui:SetCore("SendNotification", {
+        Title = title,
+        Text = text,
+        Duration = 3,
+    })
+end
+
+-- --- ESP FUNCTIONS ---
+local function addESPToCharacter(character, plr)
+    if not character:FindFirstChild("HumanoidRootPart") then
+        return
+    end
     
-    metatable.__index = function(self, key)
-        if key == "FindFirstChildOfClass" or key == "FindFirstChild" then
-            if debug.getinfo(2).source:find("AntiCheat") or debug.getinfo(2).source:find("Detection") then
-                return function() return nil end
-            end
+    if character:FindFirstChild("Highlight") then
+        return
+    end
+    
+    local highlight = Instance.new("Highlight")
+    highlight.FillColor = Theme.ESPColor
+    highlight.OutlineColor = Theme.ESPOutline
+    highlight.FillTransparency = 0.4
+    highlight.OutlineTransparency = 0
+    highlight.Adornee = character
+    highlight.Parent = character
+    
+    espHighlights[plr] = highlight
+end
+
+local function removeESPFromCharacter(character, plr)
+    local highlight = character:FindFirstChild("Highlight")
+    if highlight then
+        highlight:Destroy()
+    end
+    espHighlights[plr] = nil
+end
+
+local function enableESP()
+    espEnabled = true
+    
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= player and p.Character then
+            addESPToCharacter(p.Character, p)
         end
-        return oldIndex(self, key)
+    end
+    
+    for plr, conn in pairs(espConnections) do
+        if conn then pcall(function() conn:Disconnect() end) end
+    end
+    espConnections = {}
+    
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= player then
+            espConnections[p] = p.CharacterAdded:Connect(function(character)
+                character:WaitForChild("HumanoidRootPart", 3)
+                if espEnabled then
+                    addESPToCharacter(character, p)
+                end
+            end)
+        end
+    end
+    
+    notify("✅ ESP", "ESP Enabled")
+end
+
+local function disableESP()
+    espEnabled = false
+    
+    for plr, conn in pairs(espConnections) do
+        if conn then pcall(function() conn:Disconnect() end) end
+    end
+    espConnections = {}
+    
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p.Character then
+            removeESPFromCharacter(p.Character, p)
+        end
+    end
+    
+    notify("❌ ESP", "ESP Disabled")
+end
+
+local function toggleESP()
+    if espEnabled then
+        disableESP()
+    else
+        enableESP()
     end
 end
 
--- Использует более сложный способ ротации для обхода детекции
-local function antiDetectRotate(hrp, deltaTime)
-    if not hrp then return end
-    
-    -- Вычисляем угол поворота с учетом дельта-времени
-    local rotationAmount = math.rad(SPIN_SPEED * deltaTime)
-    
-    -- Применяем ротацию через манипуляцию CFrame
-    local currentCF = hrp.CFrame
-    local x, y, z = currentCF:ToEulerAnglesXYZ()
-    
-    -- Добавляем Y ротацию (вертикальное вращение)
-    y = y + rotationAmount
-    
-    -- Нормализуем угол
-    y = y % (2 * math.pi)
-    
-    -- Применяем новый CFrame без рывков
-    hrp.CFrame = CFrame.new(currentCF.Position) * CFrame.Angles(x, y, z)
+-- Handle new players joining
+Players.PlayerAdded:Connect(function(p)
+    if p ~= player then
+        espConnections[p] = p.CharacterAdded:Connect(function(character)
+            character:WaitForChild("HumanoidRootPart", 3)
+            if espEnabled then
+                addESPToCharacter(character, p)
+            end
+        end)
+    end
+end)
+
+-- Clean up when players leave
+Players.PlayerRemoving:Connect(function(p)
+    if espConnections[p] then
+        espConnections[p]:Disconnect()
+        espConnections[p] = nil
+    end
+    if p.Character then
+        removeESPFromCharacter(p.Character, p)
+    end
+end)
+
+-- --- LOGIC ---
+local spots = {
+    CFrame.new(-402.18, -6.34, 131.83) * CFrame.Angles(0, math.rad(-20.08), 0),
+    CFrame.new(-416.66, -6.34, -2.05) * CFrame.Angles(0, math.rad(-62.89), 0),
+    CFrame.new(-329.37, -4.68, 18.12) * CFrame.Angles(0, math.rad(-30.53), 0),
+}
+
+local function fastClick()
+    task.wait(0.7)
+    local size = workspace.CurrentCamera.ViewportSize
+    for _ = 1, 5 do
+        VirtualInputManager:SendMouseButtonEvent(size.X/2, size.Y/2 + 23, 0, true, game, 1)
+        VirtualInputManager:SendMouseButtonEvent(size.X/2, size.Y/2 + 23, 0, false, game, 1)
+        task.wait(0.01)
+    end
 end
 
--- Альтернативный способ ротации (более скрытный)
-local function stealthRotate(hrp, deltaTime)
-    if not hrp then return end
-    
-    local rotationAmount = math.rad(SPIN_SPEED * deltaTime)
-    local currentCF = hrp.CFrame
-    
-    -- Используем матричное умножение вместо Angles для обхода детекции
-    hrp.CFrame = currentCF * CFrame.Angles(0, rotationAmount, 0)
-end
-
--- --- SPIN LOGIC ---
-
-local function startSpin()
-    isSpinning = true
-    local char = player.Character
-    
-    if not char or not char:FindFirstChild("HumanoidRootPart") then
-        print("❌ Character not found")
-        isSpinning = false
+local function executeAction()
+    local tool = player.Backpack:FindFirstChild(REQUIRED_TOOL) or player.Character:FindFirstChild(REQUIRED_TOOL)
+    if not tool then
+        notify("❌ MISSING", "Requires: " .. REQUIRED_TOOL)
         return
     end
 
-    local hrp = char.HumanoidRootPart
-    
-    -- Отключаем детекцию перед началом
-    pcall(hideFromDetection)
-    
-    if spinConnection then
-        spinConnection:Disconnect()
+    local char = player.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+    if tool.Parent ~= char then char.Humanoid:EquipTool(tool) end
+
+    local target = nil
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= player then target = p break end
     end
 
-    spinConnection = RunService.RenderStepped:Connect(function(deltaTime)
-        if not isSpinning then
-            if spinConnection then
-                spinConnection:Disconnect()
-                spinConnection = nil
-            end
-            return
-        end
-
-        if not char or not char:FindFirstChild("HumanoidRootPart") or not char:FindFirstChild("Humanoid") then
-            isSpinning = false
-            if spinConnection then
-                spinConnection:Disconnect()
-                spinConnection = nil
-            end
-            return
-        end
-
-        local humanoid = char:FindFirstChild("Humanoid")
-        if humanoid and humanoid.Health <= 0 then
-            isSpinning = false
-            if spinConnection then
-                spinConnection:Disconnect()
-                spinConnection = nil
-            end
-            return
-        end
-
-        -- Используем скрытый способ ротации
-        stealthRotate(hrp, deltaTime)
-    end)
-
-    print("🌀 SPIN STARTED - 820°/sec")
-end
-
-local function stopSpin()
-    isSpinning = false
-    if spinConnection then
-        spinConnection:Disconnect()
-        spinConnection = nil
+    for _, spot in ipairs(spots) do
+        char.HumanoidRootPart.CFrame = spot
+        task.wait(0.1)
     end
-    print("⏹️ SPIN STOPPED")
+
+    if target then
+        StarterGui:SetCore("PromptBlockPlayer", target)
+        fastClick()
+    end
 end
 
 -- --- UI CONSTRUCTION ---
+if player.PlayerGui:FindFirstChild("MLML673 HUB") then
+    player.PlayerGui:FindFirstChild("MLML673 HUB"):Destroy()
+end
 
 local sg = Instance.new("ScreenGui", player.PlayerGui)
-sg.Name = "AntiCheat_SPIN"
+sg.Name = "MLML673 HUB"
 sg.ResetOnSpawn = false
 
 -- Main Container
 local main = Instance.new("Frame", sg)
-main.Size = UDim2.new(0, 250, 0, 150)
-main.Position = UDim2.new(0.02, 0, 0.5, -75)
-main.BackgroundColor3 = Color3.fromRGB(10, 10, 12)
+main.Size = UDim2.new(0, 280, 0, 310)
+main.Position = UDim2.new(0.5, -140, 0.5, -155)
+main.BackgroundColor3 = Theme.Background
 main.BorderSizePixel = 0
 
-local corner = Instance.new("UICorner", main)
-corner.CornerRadius = UDim.new(0, 12)
+local mainCorner = Instance.new("UICorner", main)
+mainCorner.CornerRadius = UDim.new(0, 16)
 
-local stroke = Instance.new("UIStroke", main)
-stroke.Thickness = 2
-stroke.Color = Color3.fromRGB(0, 255, 230)
-stroke.Transparency = 0.5
+-- THE SHINING STROKE
+local mainStroke = Instance.new("UIStroke", main)
+mainStroke.Thickness = 2.5
+mainStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+local strokeGradient = Instance.new("UIGradient", mainStroke)
+strokeGradient.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Theme.Accent),
+    ColorSequenceKeypoint.new(0.5, Theme.AccentSecondary),
+    ColorSequenceKeypoint.new(1, Theme.Accent)
+})
+
+-- Animate the Shine
+RunService.RenderStepped:Connect(function()
+    strokeGradient.Rotation = (strokeGradient.Rotation + 1.5) % 360
+end)
 
 -- Header
-local header = Instance.new("TextLabel", main)
-header.Size = UDim2.new(1, 0, 0, 40)
-header.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
-header.Text = "ANTI-CHEAT SPIN 820°"
-header.TextColor3 = Color3.fromRGB(0, 255, 230)
-header.Font = Enum.Font.BuilderSansBold
-header.TextSize = 14
-header.BorderSizePixel = 0
+local header = Instance.new("Frame", main)
+header.Size = UDim2.new(1, 0, 0, 50)
+header.BackgroundTransparency = 1
 
-local hCorner = Instance.new("UICorner", header)
-hCorner.CornerRadius = UDim.new(0, 12)
+local title = Instance.new("TextLabel", header)
+title.Size = UDim2.new(1, 0, 1, 0)
+title.Position = UDim2.new(0, 15, 0, 0)
+title.Text = "MLML673 HUB"
+title.TextColor3 = Theme.Text
+title.Font = Enum.Font.BuilderSansBold
+title.TextSize = 20
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.BackgroundTransparency = 1
 
--- Spin Button
-local spinBtn = Instance.new("TextButton", main)
-spinBtn.Size = UDim2.new(0, 230, 0, 45)
-spinBtn.Position = UDim2.new(0, 10, 0, 55)
-spinBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
-spinBtn.Text = "START SPIN"
-spinBtn.TextColor3 = Color3.fromRGB(0, 255, 230)
-spinBtn.Font = Enum.Font.BuilderSansMedium
-spinBtn.TextSize = 13
-spinBtn.BorderSizePixel = 0
+local glow = Instance.new("ImageLabel", main)
+glow.Name = "Glow"
+glow.BackgroundTransparency = 1
+glow.Position = UDim2.new(0, -15, 0, -15)
+glow.Size = UDim2.new(1, 30, 1, 30)
+glow.Image = "rbxassetid://5028822351"
+glow.ImageColor3 = Theme.Accent
+glow.ImageTransparency = 0.8
+glow.ZIndex = 0
 
-local bCorner = Instance.new("UICorner", spinBtn)
-bCorner.CornerRadius = UDim.new(0, 8)
+-- --- BUTTON GENERATOR ---
+local function createBtn(text, y)
+    local btn = Instance.new("TextButton", main)
+    btn.Size = UDim2.new(0, 250, 0, 50)
+    btn.Position = UDim2.new(0.5, -125, 0, y)
+    btn.BackgroundColor3 = Theme.Button
+    btn.Text = text
+    btn.TextColor3 = Theme.TextDim
+    btn.Font = Enum.Font.BuilderSansMedium
+    btn.TextSize = 15
+    btn.AutoButtonColor = false
+    
+    local bCorner = Instance.new("UICorner", btn)
+    bCorner.CornerRadius = UDim.new(0, 10)
+    
+    local bStroke = Instance.new("UIStroke", btn)
+    bStroke.Thickness = 1.2
+    bStroke.Color = Theme.Accent
+    bStroke.Transparency = 0.8
 
-local bStroke = Instance.new("UIStroke", spinBtn)
-bStroke.Thickness = 1.5
-bStroke.Color = Color3.fromRGB(0, 255, 230)
-bStroke.Transparency = 0.6
+    -- Fancy Hover & Click Anims
+    btn.MouseEnter:Connect(function()
+        TweenService:Create(btn, TweenInfo.new(0.3), {BackgroundColor3 = Color3.fromRGB(30, 30, 40), TextColor3 = Theme.Text}):Play()
+        TweenService:Create(bStroke, TweenInfo.new(0.3), {Transparency = 0.2, Thickness = 2}):Play()
+    end)
+    
+    btn.MouseLeave:Connect(function()
+        TweenService:Create(btn, TweenInfo.new(0.3), {BackgroundColor3 = Theme.Button, TextColor3 = Theme.TextDim}):Play()
+        TweenService:Create(bStroke, TweenInfo.new(0.3), {Transparency = 0.8, Thickness = 1.2}):Play()
+    end)
 
--- Button Logic
-spinBtn.MouseButton1Click:Connect(function()
-    if isSpinning then
-        stopSpin()
-        spinBtn.Text = "START SPIN"
-        spinBtn.TextColor3 = Color3.fromRGB(0, 255, 230)
-        bStroke.Color = Color3.fromRGB(0, 255, 230)
+    btn.MouseButton1Down:Connect(function()
+        btn:TweenSize(UDim2.new(0, 240, 0, 45), "Out", "Quad", 0.1, true)
+    end)
+    
+    btn.MouseButton1Up:Connect(function()
+        btn:TweenSize(UDim2.new(0, 250, 0, 50), "Out", "Elastic", 0.4, true)
+    end)
+
+    return btn
+end
+
+local actionBtn = createBtn("EXECUTE TELEPORT", 70)
+local espBtn = createBtn("ESP: OFF", 130)
+local keyBtn = createBtn("KEYBIND: " .. teleportKey.Name, 190)
+
+-- Interaction
+actionBtn.MouseButton1Click:Connect(function()
+    executeAction()
+end)
+
+espBtn.MouseButton1Click:Connect(function()
+    toggleESP()
+    espBtn.Text = "ESP: " .. (espEnabled and "ON" or "OFF")
+    if espEnabled then
+        espBtn.TextColor3 = Color3.fromRGB(0, 255, 100)
     else
-        startSpin()
-        spinBtn.Text = "STOP SPIN [ACTIVE]"
-        spinBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
-        bStroke.Color = Color3.fromRGB(255, 100, 100)
+        espBtn.TextColor3 = Theme.TextDim
     end
 end)
 
--- Hover Effects
-spinBtn.MouseEnter:Connect(function()
-    spinBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+keyBtn.MouseButton1Click:Connect(function()
+    if isWaitingForKey then return end
+    isWaitingForKey = true
+    keyBtn.Text = "WAITING..."
+    keyBtn.TextColor3 = Theme.Accent
 end)
 
-spinBtn.MouseLeave:Connect(function()
-    if not isSpinning then
-        spinBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+UserInputService.InputBegan:Connect(function(input, gp)
+    if isWaitingForKey and input.UserInputType == Enum.UserInputType.Keyboard then
+        teleportKey = input.KeyCode
+        keyBtn.Text = "KEYBIND: " .. teleportKey.Name
+        keyBtn.TextColor3 = Theme.TextDim
+        isWaitingForKey = false
+    elseif not gp and input.KeyCode == teleportKey then
+        executeAction()
     end
 end)
 
--- Dragging
-local dragging, dragStart, startPos
+-- --- DRAGGING ---
+local dragging, dragInput, dragStart, startPos
 header.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 then
         dragging = true
@@ -234,19 +356,4 @@ UserInputService.InputEnded:Connect(function(input)
     end
 end)
 
--- Hotkey (T)
-UserInputService.InputBegan:Connect(function(input, gp)
-    if not gp and input.KeyCode == Enum.KeyCode.T then
-        if isSpinning then
-            stopSpin()
-            spinBtn.Text = "START SPIN"
-            spinBtn.TextColor3 = Color3.fromRGB(0, 255, 230)
-        else
-            startSpin()
-            spinBtn.Text = "STOP SPIN [ACTIVE]"
-            spinBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
-        end
-    end
-end)
-
-print("✅ Anti-Cheat SPIN script loaded | Press T or click button to activate")
+notify("MLML673 HUB", "Ultra-Premium UI Loaded + ESP Ready")
